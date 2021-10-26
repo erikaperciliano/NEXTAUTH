@@ -1,4 +1,6 @@
 import { createContext, ReactNode, useState } from 'react';
+import Router from 'next/router';
+
 import { api } from '../services/api';
 
 type User = {
@@ -41,6 +43,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 permissions,
                 roles
             })
+
+            Router.push('/dashboard');
         }catch(err) {
             console.log(err)
         }
