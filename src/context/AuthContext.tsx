@@ -65,7 +65,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 email,
                 permissions,
                 roles
-            })
+            });
+
+            api.defaults.headers['Authorization'] = `Beare ${token}`;
 
             Router.push('/dashboard');
         }catch(err) {
