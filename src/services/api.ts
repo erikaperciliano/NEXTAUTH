@@ -1,7 +1,10 @@
+import { rejects } from 'assert';
 import axios, { AxiosError } from 'axios';
 import { parseCookies, setCookie } from 'nookies';
 
 let cookies = parseCookies();
+let isRefreshing = false;
+let faileRequestsQueue = [];
 
 export const api = axios.create({
     baseURL: 'http://localhost:3333',
@@ -20,24 +23,50 @@ api.interceptors.response.use(response => {
             cookies = parseCookies();
 
             const { 'nextauth.refreshToken': refreshToken } = cookies;
+            const originalConfig = error.config;
 
-            api.post('/refresh', {
-                refreshToken,
-            }).then(response => {
-                const { token } = response.data;
+            if(!isRefreshing) {
+                isRefreshing = true;
 
-                setCookie(undefined, 'nextauth.token', token, {
-                    maxAge: 60 * 60 * 24 * 30, 
-                    path:'/'
+                api.post('/refresh', {
+                    refreshToken,
+                }).then(response => {
+                    const { token } = response.data;
+    
+                    setCookie(undefined, 'nextauth.token', token, {
+                        maxAge: 60 * 60 * 24 * 30, 
+                        path:'/'
+                    });
+                    setCookie(undefined, 'nextauth.refreshToken', response.data.refreshToken, {
+                        maxAge: 60 * 60 * 24 * 30,
+                        path:'/' 
+                    });
+    
+                    api.defaults.headers['Authorization'] = `Beare ${token}`;
+
+                    faileRequestsQueue.forEach(request => request.onSuccess(token));
+                    faileRequestsQueue = []; //cleaning the row
+    
+                }).catch(err => {
+                    faileRequestsQueue.forEach(request => request.onFaile(err));
+                    faileRequestsQueue = []; 
+                }).finally(() => {
+                    isRefreshing = false;
                 });
-                setCookie(undefined, 'nextauth.refreshToken', response.data.refreshToken, {
-                    maxAge: 60 * 60 * 24 * 30,
-                    path:'/' 
-                });
+            }
 
-                api.defaults.headers['Authorization'] = `Beare ${token}`;
-
-            });
+            return new Promise((resolve, reject) => {
+                faileRequestsQueue.push({
+                    onSuccess: (token: string) => {
+                        originalConfig.headers['Authorization'] = `Bearer ${token}`
+                        
+                        resolve(api(originalConfig)); // It´s the same that using async (it´s not possibel in this case)
+                    },
+                    onFaile: (err: AxiosError) => {
+                        reject(err);
+                    } 
+                })
+            })
         } else {
             //log out the user
         }
